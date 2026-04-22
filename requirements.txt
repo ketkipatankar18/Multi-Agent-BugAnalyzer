@@ -1,0 +1,3 @@
+flask
+chromadb>=0.4.22
+pandas

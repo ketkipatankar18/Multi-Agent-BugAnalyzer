@@ -1,0 +1,7 @@
+.streamlit/secrets.toml
+services/ChromaDB
+changelog.csv
+comments.csv
+issuelinks.csv
+issues.csv
+jira_rag.csv
