@@ -6,7 +6,8 @@ A 5-agent LangGraph pipeline that analyzes software bugs against 100k+ resolved 
 
 ## Demo
 
-> *Demo GIF coming soon — deployment in progress*
+> 🔧 Currently undergoing infrastructure upgrades — live demo temporarily unavailable.
+> A recorded walkthrough will be available shortly.
 
 ---
 
