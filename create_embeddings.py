@@ -1,10 +1,8 @@
 """
-generate_embeddings.py
+create_embeddings.py
 ----------------------
 Reads jira_rag.csv, embeds the embedding_text column using
 all-MiniLM-L6-v2 (same model as SnapChef), and stores in ChromaDB.
-
-Run AFTER build_jira_rag_csv.py has produced jira_rag.csv.
 
 Usage:
     python generate_embeddings.py

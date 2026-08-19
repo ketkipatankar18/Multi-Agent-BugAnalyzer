@@ -1,7 +1,68 @@
+# ── Secrets ───────────────────────────────────────────────────────────────────
 .streamlit/secrets.toml
-services/ChromaDB
+.env
+*.env
+
+# ── Large data files ──────────────────────────────────────────────────────────
 changelog.csv
 comments.csv
 issuelinks.csv
 issues.csv
 jira_rag.csv
+jira_demo.csv
+jira_train.csv
+jira_eval.csv
+*.csv
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+logs/
+services/logs/
+*.jsonl
+
+# ── Databases ─────────────────────────────────────────────────────────────────
+services/ChromaDB
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+
+# ── Node / Next.js ────────────────────────────────────────────────────────────
+node_modules/
+.next/
+frontend/.next/
+frontend/node_modules/
+out/
+
+# ── Model cache ───────────────────────────────────────────────────────────────
+.cache/
+*.onnx
+sentence_transformers/
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+
+# ── Jupyter ───────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# ── Misc files to exclude ─────────────────────────────────────────────────────
+BugAnalyzer.docx
+BugAnalyzer.pdf
+frontend/AGENTS.md
+frontend/CLAUDE.md
+frontend/.env.local
+generate_embedding.ipynb
+script.py

@@ -1,3 +1,11 @@
+streamlit
+streamlit-oauth
 flask
-chromadb>=0.4.22
 pandas
+chromadb
+langchain
+langchain-community
+openai
+requests
+tiktoken
+python-dotenv
