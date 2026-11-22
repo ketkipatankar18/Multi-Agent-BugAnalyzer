@@ -1,28 +1,23 @@
-# ── Secrets ───────────────────────────────────────────────────────────────────
-.streamlit/secrets.toml
+# Secrets
 .env
 *.env
+frontend/.env.local
 
-# ── Large data files ──────────────────────────────────────────────────────────
-changelog.csv
-comments.csv
-issuelinks.csv
-issues.csv
-jira_rag.csv
-jira_demo.csv
-jira_train.csv
-jira_eval.csv
+# Cookies
+cookies.txt
+
+# Large data files
 *.csv
 
-# ── Logs ──────────────────────────────────────────────────────────────────────
-logs/
+# Logs
 services/logs/
 *.jsonl
 
-# ── Databases ─────────────────────────────────────────────────────────────────
-services/ChromaDB
+# Databases
+services/data/
+services/ChromaDB/
 
-# ── Python ────────────────────────────────────────────────────────────────────
+# Python
 __pycache__/
 *.pyc
 *.pyo
@@ -33,36 +28,32 @@ env/
 *.egg-info/
 .pytest_cache/
 
-# ── Node / Next.js ────────────────────────────────────────────────────────────
+# Node / Next.js
 node_modules/
 .next/
-frontend/.next/
-frontend/node_modules/
 out/
 
-# ── Model cache ───────────────────────────────────────────────────────────────
+# Model cache
 .cache/
 *.onnx
 sentence_transformers/
 
-# ── OS ────────────────────────────────────────────────────────────────────────
+# OS
 .DS_Store
 Thumbs.db
 
-# ── IDE ───────────────────────────────────────────────────────────────────────
+# IDE
 .vscode/
 .idea/
 *.swp
 
-# ── Jupyter ───────────────────────────────────────────────────────────────────
+# Jupyter
 .ipynb_checkpoints/
-*.ipynb_checkpoints
+*.ipynb
 
-# ── Misc files to exclude ─────────────────────────────────────────────────────
+# Misc
 BugAnalyzer.docx
 BugAnalyzer.pdf
 frontend/AGENTS.md
 frontend/CLAUDE.md
-frontend/.env.local
-generate_embedding.ipynb
 script.py

@@ -25,6 +25,8 @@ import json
 import uuid
 import threading
 from datetime import datetime, timezone
+from logger import get_logger
+log = get_logger(__name__)
 
 # ── File location ──────────────────────────────────────────────────────────────
 AUDIT_LOG_PATH = os.environ.get("AUDIT_LOG_PATH", "logs/audit.jsonl")
@@ -49,7 +51,8 @@ def log_analysis(
     request_id         : str,
     state              : dict,
     response_time_secs : float,
-    tool_calls_made    : list = None
+    tool_calls_made    : list = None,
+    tool_inputs_log    : list = None
 ) -> None:
     """
     Append one structured record to the audit log.
@@ -82,7 +85,7 @@ def log_analysis(
             # ── Identity ───────────────────────────────────────────────────────
             "request_id"        : request_id,
             "timestamp"         : datetime.now(timezone.utc).isoformat(),
-
+            "status"            : "success",
             # ── Input ──────────────────────────────────────────────────────────
             "bug_title"         : state.get("bug_title", ""),
             "issue_description" : state.get("issue_description", "")[:300],
@@ -108,6 +111,7 @@ def log_analysis(
             # ── Agent 4 draft response ─────────────────────────────────────────
             "confidence_score"  : state.get("confidence_score", 0.0),
             "mcp_tools_called"  : tool_calls_made or [],
+            "mcp_tool_inputs"   : tool_inputs_log or [],
             "mcp_tool_count"    : len(tool_calls_made) if tool_calls_made else 0,
 
             # ── Agent 5 escalation ─────────────────────────────────────────────
@@ -120,6 +124,7 @@ def log_analysis(
 
             # ── Performance ────────────────────────────────────────────────────
             "response_time_secs": round(response_time_secs, 2),
+            "agent_timings"     : state.get("agent_timings", {}),
         }
 
         # Thread-safe append
@@ -127,16 +132,41 @@ def log_analysis(
             with open(AUDIT_LOG_PATH, "a", encoding="utf-8") as f:
                 f.write(json.dumps(record) + "\n")
 
-        print(f"[AuditLog] Logged request_id={request_id}, "
+        log.info(f"[AuditLog] Logged request_id={request_id}, "
               f"confidence={record['confidence_score']:.2f}, "
               f"escalated={record['escalated']}, "
               f"time={record['response_time_secs']}s")
 
     except Exception as e:
         # Never let logging break the response
-        print(f"[AuditLog] WARNING: Failed to write audit log — {e}")
+        log.warning(f"[AuditLog] WARNING: Failed to write audit log — {e}")
 
-
+def log_failure(
+    request_id        : str,
+    inputs            : dict,
+    error             : str,
+    response_time_secs: float,
+) -> None:
+    """Append a record for an analysis that crashed, so failures are measurable too."""
+    try:
+        _ensure_log_dir()
+        record = {
+            "request_id"        : request_id,
+            "timestamp"         : datetime.now(timezone.utc).isoformat(),
+            "status"            : "failed",
+            "bug_title"         : inputs.get("bug_title", ""),
+            "issue_description" : inputs.get("issue_description", "")[:300],
+            "user_priority"     : inputs.get("user_priority", "Unknown"),
+            "error"             : error[:500],
+            "escalated"         : False,
+            "response_time_secs": round(response_time_secs, 2),
+        }
+        with _write_lock:
+            with open(AUDIT_LOG_PATH, "a", encoding="utf-8") as f:
+                f.write(json.dumps(record) + "\n")
+    except Exception as e:
+        log.warning(f"[AuditLog] Failed to write failure record — {e}")
+        
 def read_logs(limit: int = 50, escalated_only: bool = False) -> list:
     """
     Read the most recent audit log entries.
@@ -172,7 +202,7 @@ def read_logs(limit: int = 50, escalated_only: bool = False) -> list:
         return records[:limit]
 
     except Exception as e:
-        print(f"[AuditLog] WARNING: Failed to read audit log — {e}")
+        log.warning(f"[AuditLog] WARNING: Failed to read audit log — {e}")
         return []
 
 
@@ -183,9 +213,19 @@ def get_summary_stats() -> dict:
     Useful for spotting confidence drift or escalation rate changes over time.
     """
     try:
-        records = read_logs(limit=10000)
-        if not records:
+        # records = read_logs(limit=10000)
+        # if not records:
+        #     return {"total_analyses": 0}
+
+        # total           = len(records)
+        all_records = read_logs(limit=10000)
+        if not all_records:
             return {"total_analyses": 0}
+
+        failed  = [r for r in all_records if r.get("status") == "failed"]
+        records = [r for r in all_records if r.get("status", "success") != "failed"]
+        if not records:
+            return {"total_analyses": 0, "failed_count": len(failed)}
 
         total           = len(records)
         escalated       = sum(1 for r in records if r.get("escalated"))
@@ -209,6 +249,8 @@ def get_summary_stats() -> dict:
 
         return {
             "total_analyses"      : total,
+            "failed_count"        : len(failed),
+            "failure_rate"        : round(len(failed) / len(all_records), 3),
             "escalation_rate"     : round(escalated / total, 3),
             "escalated_count"     : escalated,
             "avg_confidence_score": round(avg_confidence, 3),
@@ -222,5 +264,5 @@ def get_summary_stats() -> dict:
         }
 
     except Exception as e:
-        print(f"[AuditLog] WARNING: Failed to compute summary — {e}")
+        log.warning(f"[AuditLog] WARNING: Failed to compute summary — {e}")
         return {"error": str(e)}

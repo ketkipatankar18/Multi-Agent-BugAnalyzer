@@ -35,17 +35,8 @@ export default function Home() {
   const [stackTrace, setStackTrace]     = useState("")
   const [priority, setPriority]         = useState("Major")
   const [error, setError]               = useState("")
-  const [showRecent, setShowRecent]     = useState(false)
-  const [recentSearches, setRecent]     = useState<RecentSearch[]>([])
   const router = useRouter()
-
-  // Load recent searches from localStorage on mount
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem("buganalyzer_recent")
-      if (stored) setRecent(JSON.parse(stored))
-    } catch {}
-  }, [])
+  const [aboutOpen, setAboutOpen] = useState(false)
 
   const fillExample = (ex: typeof EXAMPLES[0]) => {
     setTitle(ex.title)
@@ -62,28 +53,14 @@ export default function Home() {
     }
     setError("")
 
-    // Save to recent searches
-    const newSearch: RecentSearch = {
-      title   : title.trim() || issue.trim().slice(0, 50),
-      priority,
-      timestamp: Date.now(),
-    }
-    try {
-      const updated = [newSearch, ...recentSearches.filter(r => r.title !== newSearch.title)].slice(0, 5)
-      localStorage.setItem("buganalyzer_recent", JSON.stringify(updated))
-    } catch {}
-
-    const combined = [
-      title.trim(),
-      issue.trim(),
-      stackTrace.trim() ? `Stack trace: ${stackTrace.trim()}` : ""
-    ].filter(Boolean).join("\n\n")
-
-    sessionStorage.setItem("issue_description", combined)
+    // sessionStorage.setItem("issue_description", combined)
+    sessionStorage.setItem("issue_description", issue.trim() || title.trim())
     sessionStorage.setItem("bug_title", title)
     sessionStorage.setItem("priority", priority)
     sessionStorage.setItem("stack_trace", stackTrace)
-    router.push("/results")
+    sessionStorage.removeItem("job_id")   // new search → new job (results page reuses job_id only on refresh)
+    // router.push("/results")
+    router.replace("/results")
   }
 
   const PRIORITY_COLORS: Record<string, string> = {
@@ -97,7 +74,7 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-gray-950 text-white flex flex-col">
 
-      {/* Top nav */}
+      {/* Top nav
       <nav className="border-b border-gray-800 px-8 py-4 flex items-center gap-3">
         <span className="text-lg">🐛</span>
         <span className="font-semibold tracking-tight">BugAnalyzer</span>
@@ -107,26 +84,55 @@ export default function Home() {
           </a>
           <span className="text-xs text-gray-600 font-mono">100k+ tickets indexed</span>
         </div>
-      </nav>
+      </nav> */}
 
       <div className="flex-1 flex items-start justify-center pt-12 px-6 pb-16">
         <div className="w-full max-w-2xl">
 
           {/* Hero + description */}
-          <div className="mb-8">
-            <h1 className="text-4xl font-bold tracking-tight mb-3">
-              Find fixes for your bug
-            </h1>
-            <p className="text-gray-400 text-base leading-relaxed mb-4">
-              Describe a software bug and BugAnalyzer searches 100k+ resolved Apache JIRA
-              tickets using semantic AI search — then generates a structured root cause
-              analysis, fix recommendation, and priority assessment using a 5-agent pipeline.
+          {/* <div className="mb-8">
+            <p className="text-gray-400 leading-relaxed">
+              Stuck on a bug? Describe it and BugAnalyzer finds how similar bugs were fixed in real open-source projects. Get a root cause, a fix recommendation, and a priority assessment in under 60 seconds.
             </p>
-            <div className="flex flex-wrap gap-4 text-xs text-gray-500">
-              <span>✦ Works best for Java, C++, Python, and web framework bugs</span>
-              <span>✦ Include a stack trace for more precise results</span>
-              <span>✦ Security bugs are automatically escalated for human review</span>
+            <p className="text-gray-400 leading-relaxed mt-3">
+              Built for teams too. Swap in your company&apos;s resolved bug history as the knowledge base and every engineer gets instant access to fixes your team has already figured out. No more rediscovering fixes your team already found.
+            </p>
+            <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-xs text-gray-500 mt-6">
+              <span>✦ Root cause analysis with code-level fix suggestions</span>
+              <span>✦ Similar resolved tickets from real open-source projects</span>
+              <span>✦ Priority assessment backed by historical data</span>
+              <span>✦ Security bugs automatically flagged for human review</span>
+              <span>✦ Follow-up Q&A on any part of the analysis</span>
             </div>
+          </div> */}
+          <div className="mb-6">
+            <button
+              onClick={() => setAboutOpen(!aboutOpen)}
+              className="flex items-center gap-2 group mb-2"
+            >
+              <span className="text-xs font-medium text-gray-500 uppercase tracking-wider group-hover:text-gray-400 transition-colors">
+                About BugAnalyzer
+              </span>
+              <span className="text-gray-600 text-xs group-hover:text-gray-400 transition-colors">
+                {aboutOpen ? "▲" : "▼"}
+              </span>
+            </button>
+            {aboutOpen && (
+              <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-5 space-y-3 mb-4">
+                <p className="text-gray-400 text-sm leading-relaxed">
+                  Stuck on a bug? Describe it and BugAnalyzer finds how similar bugs were fixed in real open-source projects. Get a root cause, a fix recommendation, and a priority assessment in under 60 seconds.
+                </p>
+                <p className="text-gray-400 text-sm leading-relaxed mt-3">
+                  Built for teams too. Swap in your company&apos;s resolved bug history as the knowledge base and every engineer gets instant access to fixes your team has already figured out. No more rediscovering fixes your team already found.
+                </p>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs text-gray-500 pt-1 border-t border-gray-800/60">
+                  <span className="pt-2">✦ Root cause analysis with fix suggestions</span>
+                  <span className="pt-2">✦ Similar resolved tickets from open-source</span>
+                  <span>✦ Priority assessment backed by historical data</span>
+                  <span>✦ Security bugs flagged for human review</span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Example queries */}
@@ -152,51 +158,13 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Recent searches */}
-          {recentSearches.length > 0 && (
-            <div className="mb-6">
-              <button
-                onClick={() => setShowRecent(!showRecent)}
-                className="text-xs text-gray-500 hover:text-gray-400 transition-colors flex items-center gap-1"
-              >
-                <span>{showRecent ? "▲" : "▼"}</span>
-                <span>Recent searches ({recentSearches.length})</span>
-              </button>
-
-              {showRecent && (
-                <div className="mt-3 flex flex-col gap-2">
-                  {recentSearches.map((r, i) => (
-                    <button
-                      key={i}
-                      onClick={() => {
-                        setTitle(r.title)
-                        setPriority(r.priority)
-                      }}
-                      className="flex items-center justify-between text-left px-4 py-2.5 bg-gray-900/50 border border-gray-800 rounded-lg hover:border-gray-700 transition-all"
-                    >
-                      <span className="text-sm text-gray-400">{r.title}</span>
-                      <div className="flex items-center gap-3 shrink-0 ml-3">
-                        <span className={`text-xs ${PRIORITY_COLORS[r.priority] ?? "text-gray-500"}`}>
-                          {r.priority}
-                        </span>
-                        <span className="text-xs text-gray-600">
-                          {new Date(r.timestamp).toLocaleDateString()}
-                        </span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
           {/* Form card */}
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-5">
 
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1.5">
-                Bug title
-                <span className="text-gray-500 font-normal ml-1">— short summary</span>
+                Bug Title
+                <span className="text-gray-500 font-normal ml-1"></span>
               </label>
               <input
                 type="text"
@@ -210,7 +178,7 @@ export default function Home() {
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1.5">
                 Description
-                <span className="text-gray-500 font-normal ml-1">— steps to reproduce, environment, context</span>
+                <span className="text-gray-500 font-normal ml-1"></span>
               </label>
               <textarea
                 className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2.5 text-white placeholder-gray-600 focus:outline-none focus:border-blue-500 text-sm resize-none transition-colors"
@@ -223,8 +191,8 @@ export default function Home() {
 
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1.5">
-                Error message / stack trace
-                <span className="text-gray-500 font-normal ml-1">— optional but improves results significantly</span>
+                Error message / Stack trace
+                <span className="text-gray-500 font-normal ml-1"> (optional)</span>
               </label>
               <textarea
                 className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2.5 text-white placeholder-gray-600 focus:outline-none focus:border-blue-500 text-sm resize-none font-mono transition-colors"
@@ -237,7 +205,7 @@ export default function Home() {
 
             <div className="flex gap-3 pt-1">
               <div className="w-44">
-                <label className="block text-xs font-medium text-gray-400 mb-1.5">Priority</label>
+                <label className="block text-sm font-medium text-gray-300 mb-1.5">Priority</label>
                 <select
                   className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2.5 text-white focus:outline-none focus:border-blue-500 text-sm transition-colors"
                   value={priority}
@@ -255,18 +223,11 @@ export default function Home() {
                   onClick={handleSubmit}
                   className="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium py-2.5 rounded-lg text-sm transition-colors"
                 >
-                  Analyse bug with 5 agents →
+                  Run Analysis →
                 </button>
               </div>
             </div>
 
-          </div>
-
-          {/* Trust signals */}
-          <div className="mt-5 flex flex-wrap gap-5 text-xs text-gray-600">
-            <span>📦 Apache JIRA — 100k resolved tickets</span>
-            <span>🔍 Weaviate semantic search + Cohere reranking</span>
-            <span>🤖 Gemini Flash · Claude Sonnet · Groq Llama</span>
           </div>
 
         </div>

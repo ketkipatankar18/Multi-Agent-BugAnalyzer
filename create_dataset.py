@@ -1,5 +1,5 @@
 """
-build_jira_rag_csv.py
+create_dataset.py
 ---------------------
 Builds jira_rag.csv and splits into train/eval/demo sets.
 

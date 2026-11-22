@@ -23,15 +23,8 @@ from agents import (
     retriever_agent,
     draft_response_agent,
     escalation_agent,
+    timed,
 )
-
-# from services.agents import (
-#     parallel_classify_and_assess,
-#     retriever_agent,
-#     draft_response_agent,
-#     escalation_agent,
-# )
-
 # ── State definition ──────────────────────────────────────────────────────────
 class BugAnalyzerState(TypedDict, total=False):
     # ── Inputs ────────────────────────────────────────────────────────────────
@@ -49,8 +42,13 @@ class BugAnalyzerState(TypedDict, total=False):
     escalation_decision: dict      # from Escalation Agent
 
     # ── Metadata ──────────────────────────────────────────────────────────────
+    # agent_status      : dict       # tracks completion of each agent for frontend
+    # mcp_tool_calls    : list 
+    request_id        : str        # UUID — shared by audit log, review queue, Slack deep link
     agent_status      : dict       # tracks completion of each agent for frontend
-    mcp_tool_calls    : list 
+    mcp_tool_calls    : list       # tool names Claude called
+    mcp_tool_inputs   : list       # [{"tool": name, "input": {...}}] for audit/debugging
+    agent_timings     : dict 
 
 # ── Build graph ───────────────────────────────────────────────────────────────
 def build_graph(query_weaviate_fn):
@@ -64,10 +62,14 @@ def build_graph(query_weaviate_fn):
     retriever_with_fn = partial(retriever_agent, query_weaviate_fn=query_weaviate_fn)
 
     # ── Register nodes ────────────────────────────────────────────────────────
-    workflow.add_node("parallel_start",   parallel_classify_and_assess)
-    workflow.add_node("retriever",        retriever_with_fn)
-    workflow.add_node("draft_response",   draft_response_agent)
-    workflow.add_node("escalation",       escalation_agent)
+    # workflow.add_node("parallel_start",   parallel_classify_and_assess)
+    # workflow.add_node("retriever",        retriever_with_fn)
+    # workflow.add_node("draft_response",   draft_response_agent)
+    # workflow.add_node("escalation",       escalation_agent)
+    workflow.add_node("parallel_start", timed("classify_severity")(parallel_classify_and_assess))
+    workflow.add_node("retriever",      timed("retriever")(retriever_with_fn))
+    workflow.add_node("draft_response", timed("draft_response")(draft_response_agent))
+    workflow.add_node("escalation",     timed("escalation")(escalation_agent))
 
     # ── Define edges (linear after the parallel start) ────────────────────────
     workflow.add_edge(START,              "parallel_start")
