@@ -19,7 +19,7 @@ User submits bug report (title + description + stack trace + priority)
 ┌─────────────────────────────────────────┐
 │  Agent 1: Classifier (Gemini Flash)     |
 |                                         │  ← runs in parallel
-│  Agent 2: Severity   (Gemini Flash)     │  
+│  Agent 2: Severity   (Gemini Flash)     │
 └─────────────────────────────────────────┘
     ↓
 Agent 3: Retriever
@@ -50,7 +50,7 @@ Response to user  OR  Human review queue
 - **nomic-embed-text-v1.5 embeddings** — 8192-token context eliminates the 22% truncation seen with 512-token models across the dataset
 - **Claude Sonnet with MCP tool access** — agentic loop lets Claude fetch individual ticket details or search for additional matches before writing the analysis
 - **Confidence-calibrated escalation** — sub-0.5 confidence, security keywords, and urgent sentiment all trigger escalation
-- **Groq Llama 3.3-70B sentiment check** — borderline cases (0.5-0.65 confidence) are routed through a fast sentiment classifier
+- **Groq Llama 3.3-70B sentiment check** — borderline cases (0.5–0.65 confidence) are routed through a fast sentiment classifier
 - **Slack notifications** — real-time escalation alerts sent to reviewer channel with link to review queue
 - **Atlassian Jira integration** — escalated bugs automatically create real tickets in your Jira project
 - **Human-in-the-loop review queue** — approve/reject AI analysis with reviewer notes
@@ -59,6 +59,10 @@ Response to user  OR  Human review queue
 - **TTL cache** — repeated ticket lookups served from memory, no redundant CSV reads
 - **Follow-up chat** — multi-turn conversation with Claude Sonnet grounded in the original analysis
 - **Thumbs up/down feedback** — structured feedback collection for downstream evaluation
+- **Auth & session management** — JWT-based login, role-based access (admin/reviewer), 8-hour sessions
+- **SSE streaming** — live pipeline progress streamed to the frontend via Server-Sent Events
+- **Rate limiting** — per-endpoint limits (5/min on analyze, 10/min on chat)
+- **PostgreSQL persistence** — full analysis results stored for audit and review
 
 ---
 
@@ -80,28 +84,37 @@ Response to user  OR  Human review queue
 ```
 Multi_Agent_BugAnalyzer/
 ├── services/
-│   ├── app.py                  # FastAPI backend — all endpoints
-│   ├── graph.py                # LangGraph graph definition
-│   ├── agents.py               # All 5 agents
-│   ├── mcp_tools.py            # MCP tools: Slack, Jira, CSV search, ticket lookup
-│   ├── audit_log.py            # Structured JSONL audit logging
-│   ├── logs/
-│   │   └── audit.jsonl         # Audit log (gitignored)
-│   └── requirements.txt
+│   ├── app.py              # FastAPI backend — all endpoints
+│   ├── graph.py            # LangGraph graph definition
+│   ├── agents.py           # All 5 agents
+│   ├── auth.py             # JWT auth, login, session management
+│   ├── db.py               # PostgreSQL — analysis persistence
+│   ├── jobs.py             # Redis job queue + SSE streaming
+│   ├── mcp_tools.py        # MCP tools: Slack, Jira, CSV search, ticket lookup
+│   ├── resilience.py       # Circuit breaker pattern
+│   ├── audit_log.py        # Structured JSONL audit logging
+│   ├── logger.py           # Logging config
+│   ├── seed_admin.py       # Creates default admin user on first run
+│   ├── create_user.py      # CLI utility to create users
+│   └── load_tickets.py     # Loads ticket data into DB
 │
 ├── frontend/
 │   ├── app/
 │   │   ├── page.tsx            # Home — bug input form, example chips
-│   │   ├── results/page.tsx    # Results — pipeline viz, sections, feedback
+│   │   ├── results/page.tsx    # Results — SSE pipeline viz, sections, chat
 │   │   ├── review/page.tsx     # Human review queue
-│   │   └── api/chat/route.ts   # Follow-up chat API route (Claude Sonnet)
-│   └── package.json
+│   │   ├── login/page.tsx      # Admin login
+│   │   └── components/
+│   │       └── NavBar.tsx      # Shared navigation bar
+│   └── lib/
+│       └── api.ts              # Auth-aware fetch wrapper
 │
-├── data_pipeline/
+├── scripts/
 │   ├── create_dataset.py           # 1.1M → 714k cleaned → train/eval/demo split
 │   └── create_embeddings_weaviate.ipynb  # Kaggle T4 GPU embedding pipeline
 │
-├── .env.example                # Environment variable template
+├── requirements.txt
+├── .env.example            # Environment variable template
 ├── .gitignore
 └── README.md
 ```
@@ -112,14 +125,17 @@ Multi_Agent_BugAnalyzer/
 
 | Layer | Technology |
 |---|---|
-| Frontend | Next.js, React, TypeScript, Tailwind CSS, Vercel |
-| Backend | FastAPI, Python, AWS EC2 |
+| Frontend | Next.js, React, TypeScript, Tailwind CSS |
+| Backend | FastAPI, Python |
 | Orchestration | LangGraph, ThreadPoolExecutor (parallel agents) |
 | Vector Store | Weaviate Cloud |
 | Embedding Model | nomic-embed-text-v1.5 (8192-token context, 768 dims) |
 | Reranking | Cohere Rerank v3 (rerank-english-v3.0) |
-| Agent LLMs | Gemini Flash 3.6 (Classifier + Severity), Claude Sonnet (Draft Response), Groq Llama 3.3-70B (Escalation) |
+| Agent LLMs | Gemini Flash (Classifier + Severity), Claude Sonnet (Draft Response), Groq Llama 3.3-70B (Escalation) |
 | MCP Tools | Anthropic tool_use API — get_ticket_details, search_full_dataset, notify_reviewer, create_jira_ticket |
+| Streaming | Server-Sent Events (SSE) via Redis job queue |
+| Auth | JWT, bcrypt, role-based access control |
+| Database | PostgreSQL (analysis persistence), Redis (job queue + SSE) |
 | Notifications | Slack Incoming Webhooks |
 | Issue Tracking | Atlassian Jira REST API v2 |
 | Resilience | Circuit breaker pattern, TTL cache |
@@ -139,7 +155,7 @@ The enriched query (plus up to 300 chars of stack trace) is embedded using `nomi
 
 ### 3. Draft Response with MCP Tools
 
-Claude Sonnet receives the top 15 tickets and the full bug context. Before writing the analysis, Claude can call two MCP tools: `get_ticket_details` to fetch the full discussion of a specific ticket (the CSV stores up to 4000 chars, plenty for most cases), or `search_full_dataset` to keyword-search the full 100k corpus when the retrieved tickets don't match well. Claude then writes a 4-section markdown analysis and assigns a confidence score.
+Claude Sonnet receives the top 15 tickets and the full bug context. Before writing the analysis, Claude can call two MCP tools: `get_ticket_details` to fetch the full discussion of a specific ticket, or `search_full_dataset` to keyword-search the full 100k corpus when the retrieved tickets don't match well. Claude then writes a 4-section markdown analysis and assigns a confidence score.
 
 ### 4. Escalation
 
@@ -156,9 +172,9 @@ Escalated bugs appear in the `/review` queue. Reviewers can read the AI draft, a
 Raw dataset: [tedlozzo/apaches-jira-issues](https://www.kaggle.com/datasets/tedlozzo/apaches-jira-issues) — 1.1M Apache JIRA issues across Kafka, Hadoop, Spark, Cassandra, and 100+ other projects.
 
 **Processing steps:**
-1. `create_dataset.py` — joins issues + comments, filters to resolved tickets, produces `jira_rag.csv` (714k rows)
+1. `scripts/create_dataset.py` — joins issues + comments, filters to resolved tickets, produces `jira_rag.csv` (714k rows)
 2. Stratified split → `jira_train.csv` (95%) + `jira_eval.csv` (5% holdout) + `jira_demo.csv` (100k stratified sample for Weaviate free tier)
-3. `create_embeddings_weaviate.ipynb` — runs on Kaggle T4 GPU, embeds `jira_demo.csv` into Weaviate with `search_document:` prefix
+3. `scripts/create_embeddings_weaviate.ipynb` — runs on Kaggle T4 GPU, embeds `jira_demo.csv` into Weaviate with `search_document:` prefix
 
 **Why nomic-embed-text-v1.5 over BGE-base:**
 Token distribution analysis on 714k tickets showed 22% truncation at the 512-token limit. nomic-embed-text-v1.5's 8192-token context reduces truncation to 0% across the full dataset.
@@ -170,6 +186,8 @@ Token distribution analysis on 714k tickets showed 22% truncation at the 512-tok
 ### Prerequisites
 - Python 3.11+
 - Node.js 18+
+- PostgreSQL
+- Redis
 - Weaviate Cloud account (free sandbox)
 - API keys for Anthropic, Google (Gemini), Cohere, Groq
 
@@ -178,54 +196,40 @@ Token distribution analysis on 714k tickets showed 22% truncation at the 512-tok
 ```bash
 git clone https://github.com/ketkipatankar18/Multi-Agent-BugAnalyzer.git
 cd Multi-Agent-BugAnalyzer
-pip install -r services/requirements.txt
+pip install -r requirements.txt
 cd frontend && npm install
 ```
 
 ### 2. Configure environment
 
-Copy `.env.example` to `services/.env` and fill in:
-
 ```bash
-cp .env.example services/.env
+cp .env.example .env
+# Fill in your values — see .env.example for all required keys
 ```
 
+### 3. Set up PostgreSQL and Redis
+
 ```bash
-# Weaviate
-WEAVIATE_URL=your_weaviate_cluster_url
-WEAVIATE_KEY=your_weaviate_api_key
+# PostgreSQL — create database and user
+createdb buganalyzer
 
-# LLM APIs
-ANTHROPIC_API_KEY=sk-ant-...
-GOOGLE_API_KEY=your_google_key
-COHERE_API_KEY=your_cohere_key
-GROQ_API_KEY=your_groq_key
-
-# MCP — Slack
-SLACK_WEBHOOK_URL=https://hooks.slack.com/services/xxx/yyy/zzz
-
-# MCP — Jira
-JIRA_BASE_URL=https://yourname.atlassian.net
-JIRA_EMAIL=your@email.com
-JIRA_API_TOKEN=your_atlassian_api_token
-JIRA_PROJECT_KEY=SCRUM
-
-# Data
-JIRA_CSV_PATH=../jira_demo.csv
-AUDIT_LOG_PATH=logs/audit.jsonl
-REVIEW_URL=http://localhost:3000/review
+# Redis — start the server
+redis-server
 ```
 
-### 3. Start the backend
+### 4. Start the backend
 
 ```bash
 cd services
+python seed_admin.py    # first run only — creates default admin user
 uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 Startup loads the embedding model and connects to Weaviate. Takes ~30 seconds on first run.
 
-### 4. Start the frontend
+Default admin credentials are set via `ADMIN_USERNAME` and `ADMIN_PASSWORD` in your `.env`.
+
+### 5. Start the frontend
 
 ```bash
 cd frontend
@@ -240,15 +244,20 @@ Open [http://localhost:3000](http://localhost:3000).
 
 | Method | Endpoint | Description |
 |---|---|---|
-| POST | `/analyze` | Full 5-agent pipeline |
+| POST | `/analyze` | Full 5-agent pipeline (rate limited: 5/min) |
+| GET | `/sse/{job_id}` | SSE stream for live pipeline progress |
+| POST | `/chat/{analysis_id}` | Follow-up chat grounded in analysis (max 10 turns) |
 | GET | `/search` | Direct Weaviate search |
 | GET | `/health` | Health check |
 | POST | `/feedback` | Thumbs up/down feedback |
 | GET | `/feedback/summary` | Feedback stats |
-| GET | `/review/queue` | Human review queue |
-| POST | `/review/{item_id}` | Approve or reject a review item |
+| GET | `/review/queue` | Human review queue (admin only) |
+| POST | `/review/{item_id}/decision` | Approve or reject a review item (admin only) |
 | GET | `/audit/logs` | Recent audit log entries |
 | GET | `/audit/summary` | Aggregate stats across all analyses |
+| POST | `/auth/login` | Login — returns JWT cookie |
+| POST | `/auth/logout` | Logout — clears session |
+| GET | `/auth/me` | Current user info |
 
 ---
 
@@ -265,6 +274,9 @@ Weaviate's approximate nearest neighbour search is fast but the similarity score
 
 **Why MCP tools instead of hardcoded tool calls?**
 MCP lets Claude decide when it needs more information rather than always fetching it. When retrieved tickets are directly relevant (similarity > 0.8), Claude skips tool calls and writes immediately. When tickets are loosely matched, Claude calls `search_full_dataset` to find better ones. The agent drives the decision.
+
+**Why SSE instead of polling?**
+Server-Sent Events push each pipeline stage update to the frontend as it completes, with no polling overhead. Redis stores events by job ID so a page refresh reconnects and replays the full stream from the beginning — no progress is lost.
 
 **Why circuit breakers for Slack and Jira?**
 External API failures should never crash the analysis. A Slack outage means the reviewer doesn't get a notification — it doesn't mean the user should get a 500 error. Circuit breakers absorb the failure, log it, and let the pipeline complete.
