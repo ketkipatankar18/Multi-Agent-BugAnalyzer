@@ -53,3 +53,5 @@ requests==2.34.2
 python-dotenv==1.0.1
 tenacity==8.5.0
 orjson==3.11.9
+
+sentence-transformers==3.4.1
